@@ -2119,6 +2119,8 @@ window.addEventListener('message',async function(ev){
   }
   notify({action:'complete'});
 });
+var _bkb=document.createElement('div');_bkb.id='__meb_b';_bkb.style.cssText='position:fixed;top:10px;right:10px;background:#00a650;color:#fff;padding:10px 16px;border-radius:8px;z-index:99999;font-size:13px;font-weight:700;box-shadow:0 2px 10px rgba(0,0,0,.4);cursor:pointer';_bkb.innerHTML='✅ Meli Easy ativo';_bkb.title='Clique para fechar';_bkb.onclick=function(){_bkb.remove();};document.body.appendChild(_bkb);
+if(!window.opener){_bkb.style.background='#c0392b';_bkb.innerHTML='⚠️ Meli Easy: abra pelo app';alert('⚠️ Favorito Meli Easy\n\nPara funcionar corretamente:\n\n1. Acesse meli-easy-app.github.io\n2. Importe a planilha\n3. Clique em "Buscar QR (automático)" — isso abre o Meli Pass automaticamente\n4. Faça login no Meli Pass se necessário\n5. ENTÃO clique no favorito 🔖 Meli Easy\n\nO Meli Pass precisa ser aberto pelo app para que a comunicação funcione.');window.__meb=false;return;}
 notify({action:'login_prompt'});
 })();`;
 
@@ -2126,6 +2128,11 @@ function buscarQRsBookmarklet() {
   if (!batchData.length) { alert('⚠ Importe a planilha antes de iniciar.'); return; }
   _bookmarkletMode = true;
   _meliWin = window.open('https://controleacessomlb.providersml.com/AccessControl/Home', 'melipasswin', 'width=1200,height=750');
+  if (!_meliWin) {
+    _bookmarkletMode = false;
+    alert('⚠ Popup bloqueado pelo navegador!\n\nPara liberar:\n1. Clique no ícone 🚫 (ou "Bloqueado") na barra de endereço\n2. Selecione "Sempre permitir popups de meli-easy-app.github.io"\n3. Clique em "Concluído" e tente novamente');
+    return;
+  }
   const desc = document.querySelector('#meli-panel .auto-desc');
   if (desc) desc.innerHTML = '⏳ O Meli Pass está abrindo. <b>Faça login</b> se necessário e clique no favorito <b>🔖 Meli Easy</b> na barra de favoritos.';
 }
