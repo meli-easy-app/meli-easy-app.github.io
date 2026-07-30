@@ -1461,6 +1461,7 @@ let _extensionDetected = false;
 let _screenStream      = null;
 let _meliWin           = null;
 let _bookmarkletMode   = false;
+let _meliPingInterval  = null;
 let currentModel   = 'padrao-meli';
 let activeFilters  = [];  // [{field:'area'|'empresa', value:'...'}]
 
@@ -1977,6 +1978,7 @@ function _handleExtensionMessage(event) {
 
   switch (msg.action) {
     case 'login_prompt':
+      if (_meliPingInterval) { clearInterval(_meliPingInterval); _meliPingInterval = null; }
       document.getElementById('meli-login-wait').style.display = 'block';
       break;
 
@@ -2053,6 +2055,8 @@ function downloadExtension() {
 }
 
 function cancelarMeli() {
+  if (_meliPingInterval) { clearInterval(_meliPingInterval); _meliPingInterval = null; }
+  _bookmarkletMode = false;
   document.getElementById('meli-login-wait').style.display = 'none';
   document.getElementById('btn-meli-fetch').disabled = false;
   _meliRunning = false;
@@ -2075,7 +2079,8 @@ var _n=s=>(s||'').normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').toLowerCase(
 var _f=t=>{var a=[...document.querySelectorAll('a,button,li,span,div,p,td')];return a.find(e=>e.textContent.trim()===t)||a.find(e=>e.textContent.trim().includes(t));};
 var _d=el=>{if(!el)return;['mouseenter','mouseover','mousedown','mouseup','click'].forEach(e=>el.dispatchEvent(new MouseEvent(e,{bubbles:true,cancelable:true,view:window})));};
 var _sv=(inp,val)=>{try{var c=angular.element(inp).controller('ngModel');if(c){c.$setViewValue(val);c.$render();}}catch(e){}try{Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(inp,val);['input','change','keyup'].forEach(ev=>inp.dispatchEvent(new Event(ev,{bubbles:true})));}catch(e){}try{var m=inp.getAttribute('ng-model');if(m){var sc=angular.element(inp).scope();var p=m.split('.');var o=sc;for(var i=0;i<p.length-1;i++)o=o[p[i]];o[p[p.length-1]]=val;sc.$apply();}}catch(e){}};
-var notify=d=>{if(window.opener)window.opener.postMessage(Object.assign({__meliEasyPush:true},d),'*');};
+var _src=null;
+var notify=d=>{var t=_src||window.opener;if(t)try{t.postMessage(Object.assign({__meliEasyPush:true},d),'*');}catch(e){}};
 var s1=async()=>{var u=location.href,nav=false;try{var $s=angular.element(document.body).injector().get('$state');var a=$s.get().map(s=>s.name).find(s=>/configur/i.test(_n(s)));if(a){$s.go(a);nav=true;}}catch(e){}if(!nav){var tile=[...document.querySelectorAll('[ng-click],[ui-sref],a')].find(el=>_n(el.textContent).includes('configura'));if(tile){try{var nc=tile.getAttribute('ng-click');if(nc){angular.element(tile).scope().$apply(sc=>sc.$eval(nc));nav=true;}}catch(e){}_d(tile);nav=true;}}if(!nav){var el=_f('Configurações');if(el){_d(el);nav=true;}}if(!nav)return{error:'config_not_found'};var ok=await _wc(()=>location.href!==u&&/funcionári|funcionario/i.test(document.body.innerText),12000);return ok?{ok:true}:{error:'config_timeout'};};
 var s2=async()=>{var u=location.href,nav=false;try{var $s=angular.element(document.body).injector().get('$state');var a=$s.get().map(s=>s.name).find(s=>/funcionar/i.test(s));if(a){$s.go(a);nav=true;}}catch(e){}if(!nav){var txt=_f('Funcionários')||_f('Funcionarios');var cur=txt;while(cur&&cur!==document.body){var nc=cur.getAttribute('ng-click');if(nc){try{angular.element(cur).scope().$apply(sc=>sc.$eval(nc));nav=true;}catch(e){cur.click();nav=true;}break;}cur=cur.parentElement;}if(!nav&&txt){cur=txt;while(cur&&!['A','BUTTON'].includes(cur.tagName)&&!cur.getAttribute('ng-click'))cur=cur.parentElement;if(cur&&cur!==document.body){cur.click();nav=true;}}}if(!nav)return{error:'func_not_found'};var ok=await _wc(()=>location.href!==u||!!(document.querySelector('table tbody tr,[ng-repeat]')&&document.body.innerText.length>200),10000);return ok?{ok:true}:{error:'func_timeout'};};
 var s3=async()=>{await _w(500);if(document.querySelector('input[ng-model*="egistro"],input[ng-model*="Registro"],input[ng-model*="registro"]'))return{ok:true};var lupa=document.querySelector('[ng-click*="pesquis"],[ng-click*="search"],[ng-click*="filtro"]')||document.querySelector('.fa-search')?.closest('a,button')||document.querySelector('.glyphicon-search')?.closest('a,button')||[...document.querySelectorAll('a,button')].find(e=>/pesquisar|filtrar|buscar/i.test(e.textContent));if(!lupa)return{error:'lupa_not_found'};lupa.click();var ok=await _wc(()=>!!document.querySelector('input[ng-model*="egistro"],input[ng-model*="Registro"],input[ng-model*="registro"]'),7000);return ok?{ok:true}:{error:'filter_timeout'};};
@@ -2084,7 +2089,9 @@ var s5=async()=>{await _w(300);var el=document.querySelector('a[ng-click*="edit"
 var s6=async()=>{await _w(500);for(var node of document.querySelectorAll('label,span,td,.control-label,div,p')){if(!/qr.?code/i.test(node.textContent.trim()))continue;var fi=node.getAttribute&&node.getAttribute('for');var inp=fi?document.getElementById(fi):null;if(!inp){var sv=node.nextElementSibling;while(sv&&!['INPUT','SPAN','P'].includes(sv.tagName))sv=sv.nextElementSibling;inp=sv;}if(!inp){var pn=node.closest('div,tr,.form-group,.row,li');if(pn)inp=pn.querySelector('input')||pn;}var val=(inp&&(inp.value||inp.textContent||'')).trim();if(val&&/\\d/.test(val))return{qrCode:val};}for(var sel of['input[ng-model*="QrCode"]','input[ng-model*="qrCode"]','input[ng-model*="qr_code"]','input[id*="qr" i]']){var el=document.querySelector(sel);if(el&&el.value)return{qrCode:el.value.trim()};}var cands=[...document.querySelectorAll('input[readonly],input[disabled],input')].filter(i=>i.value&&/^\\d{4,}$/.test(i.value.trim()));if(cands.length)return{qrCode:cands[0].value.trim()};return{error:'qr_not_found'};};
 window.addEventListener('message',async function(ev){
   var msg=ev.data;if(!msg||!msg.__meliEasyCmd)return;
+  _src=ev.source;
   if(msg.action==='cancel'){window.__mebc=true;return;}
+  if(msg.action==='ping'){var b=document.getElementById('__meb_b');if(b){b.style.background='#00a650';b.innerHTML='✅ Meli Easy — confirme no app';}notify({action:'login_prompt'});return;}
   if(msg.action!=='confirm_login')return;
   var collabs=msg.collaborators||[];var total=collabs.length;
   var LABELS=['','Configurações…','Funcionários…','Abrindo filtro…','Buscando RE…','Abrindo ficha…','Lendo QR…'];
@@ -2120,8 +2127,9 @@ window.addEventListener('message',async function(ev){
   notify({action:'complete'});
 });
 var _bkb=document.createElement('div');_bkb.id='__meb_b';_bkb.style.cssText='position:fixed;top:10px;right:10px;background:#00a650;color:#fff;padding:10px 16px;border-radius:8px;z-index:99999;font-size:13px;font-weight:700;box-shadow:0 2px 10px rgba(0,0,0,.4);cursor:pointer';_bkb.innerHTML='✅ Meli Easy ativo';_bkb.title='Clique para fechar';_bkb.onclick=function(){_bkb.remove();};document.body.appendChild(_bkb);
-if(!window.opener){_bkb.style.background='#c0392b';_bkb.innerHTML='⚠️ Meli Easy: abra pelo app';alert('⚠️ Favorito Meli Easy\n\nPara funcionar corretamente:\n\n1. Acesse meli-easy-app.github.io\n2. Importe a planilha\n3. Clique em "Buscar QR (automático)" — isso abre o Meli Pass automaticamente\n4. Faça login no Meli Pass se necessário\n5. ENTÃO clique no favorito 🔖 Meli Easy\n\nO Meli Pass precisa ser aberto pelo app para que a comunicação funcione.');window.__meb=false;return;}
-notify({action:'login_prompt'});
+if(window.opener){notify({action:'login_prompt'});}
+else{_bkb.style.background='#b8860b';_bkb.innerHTML='🔖 Meli Easy — aguardando app...';}
+
 })();`;
 
 function buscarQRsBookmarklet() {
@@ -2135,6 +2143,13 @@ function buscarQRsBookmarklet() {
   }
   const desc = document.querySelector('#meli-panel .auto-desc');
   if (desc) desc.innerHTML = '⏳ O Meli Pass está abrindo. <b>Faça login</b> se necessário e clique no favorito <b>🔖 Meli Easy</b> na barra de favoritos.';
+
+  // Ping the Meli Pass window so the bookmarklet can reply via ev.source (works even when window.opener is null due to COOP)
+  if (_meliPingInterval) clearInterval(_meliPingInterval);
+  _meliPingInterval = setInterval(() => {
+    if (!_meliWin || _meliWin.closed || !_bookmarkletMode) { clearInterval(_meliPingInterval); _meliPingInterval = null; return; }
+    try { _meliWin.postMessage({ __meliEasyCmd: true, action: 'ping' }, '*'); } catch(e) {}
+  }, 1500);
 }
 
 // ── Screen Capture: captura QR Codes do Meli Pass sem extensão ──────────────
