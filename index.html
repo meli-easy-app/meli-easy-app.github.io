@@ -1458,6 +1458,7 @@ let _meliFolder       = null;
 let _meliRunning      = false;
 let _meliCancelado    = false;
 let _extensionDetected = false;
+let _screenStream     = null;
 let currentModel   = 'padrao-meli';
 let activeFilters  = [];  // [{field:'area'|'empresa', value:'...'}]
 
@@ -1899,19 +1900,17 @@ function _initMeliPanelWeb() {
   const btnFetch = document.getElementById('btn-meli-fetch');
 
   if (h2mp)    h2mp.textContent = '🔍 Buscar QR no Meli Pass';
-  if (btnFetch) { btnFetch.textContent = '📷 Carregar screenshots'; btnFetch.onclick = decodificarQRsWeb; }
+  if (btnFetch) { btnFetch.textContent = '🖥 Capturar via compartilhamento de tela'; btnFetch.onclick = iniciarCapturaScreenMeli; }
   if (descmp)  descmp.innerHTML = 'Verificando extensão…';
 
   // Try active ping (covers case where relay was injected before our listener)
   window.postMessage({ __meliEasy: true, action: 'ping' }, '*');
 
-  // After 1s, if extension not detected, show fallback instructions
+  // After 1s, if extension not detected, show screen capture mode
   setTimeout(() => {
     if (_extensionDetected) return;
     if (descmp) descmp.innerHTML =
-      '⚠ Extensão não detectada. <a href="extension.zip" download style="color:#FFD100">📦 Baixe a extensão</a>, ' +
-      'instale em <b>chrome://extensions</b> (Modo de desenvolvedor → Carregar sem compactação) e recarregue. ' +
-      'Ou use o botão abaixo para carregar screenshots.';
+      'Compartilhe a aba do Meli Pass com o Chrome — o sistema detecta os QR Codes automaticamente enquanto você navega pelos colaboradores. <b>Sem extensão, sem instalação.</b>';
   }, 1000);
 }
 
@@ -2033,7 +2032,129 @@ function cancelarMeli() {
 function cancelarBuscaMeli() {
   _meliCancelado = true;
   if (window.electronAPI) window.electronAPI.meliClose();
+  else if (_screenStream) { _screenStream.getTracks().forEach(t => t.stop()); _screenStream = null; }
   else window.postMessage({ __meliEasy: true, action: 'cancel' }, '*');
+}
+
+// ── Screen Capture: captura QR Codes do Meli Pass sem extensão ──────────────
+
+async function iniciarCapturaScreenMeli() {
+  if (!batchData.length) { alert('⚠ Importe a planilha antes de iniciar.'); return; }
+  if (!('BarcodeDetector' in window)) {
+    alert('⚠ Seu navegador não suporta detecção de QR Code.\nUse Chrome 88+ ou Edge 88+.');
+    return;
+  }
+
+  const pending = batchData.filter(d => !d.qrCode);
+  if (!pending.length) { alert('✓ Todos os colaboradores já têm QR Code.'); return; }
+
+  try {
+    _screenStream = await navigator.mediaDevices.getDisplayMedia({
+      video: { frameRate: { ideal: 3, max: 5 } },
+      audio: false,
+      selfBrowserSurface: 'exclude'
+    });
+  } catch (e) { return; } // user cancelled
+
+  _meliRunning    = true;
+  _meliCancelado  = false;
+
+  document.getElementById('meli-login-wait').style.display  = 'none';
+  document.getElementById('meli-realtime').style.display     = 'block';
+  document.getElementById('btn-meli-cancel').style.display   = 'inline-block';
+  document.getElementById('btn-meli-fetch').disabled         = true;
+  document.getElementById('meli-bar').style.width            = '0%';
+  document.getElementById('meli-log').innerHTML              = '<p id="meli-log-empty" style="font-size:0.8rem;color:#4a4b68;">Nenhum ainda.</p>';
+
+  const video = document.createElement('video');
+  video.srcObject = _screenStream;
+  video.muted = true;
+  video.play();
+  await new Promise(r => { video.onloadedmetadata = () => r(); });
+
+  const canvas   = document.createElement('canvas');
+  const ctx      = canvas.getContext('2d', { willReadFrequently: true });
+  const detector = new BarcodeDetector({ formats: ['qr_code'] });
+
+  let currentIdx     = 0;
+  let lastCapturedQR = null;
+  let captureLocked  = false;
+
+  const updateUI = () => {
+    if (currentIdx >= pending.length) return;
+    const emp  = pending[currentIdx];
+    const name = `${emp.fname || ''} ${emp.lname || ''}`.trim();
+    document.getElementById('meli-prog-label').innerHTML =
+      `Navegue até <b>${name}</b> no Meli Pass e aguarde o QR aparecer`;
+    document.getElementById('meli-current-name').textContent = name;
+    document.getElementById('meli-bar').style.width =
+      Math.round((currentIdx / pending.length) * 100) + '%';
+  };
+  updateUI();
+
+  const done = () => {
+    _meliRunning = false;
+    _screenStream = null;
+    document.getElementById('btn-meli-cancel').style.display = 'none';
+    document.getElementById('btn-meli-fetch').disabled        = false;
+    document.getElementById('btn-meli-fetch').textContent     = '🖥 Capturar via tela';
+  };
+
+  const scanInterval = setInterval(async () => {
+    if (_meliCancelado || currentIdx >= pending.length || captureLocked) return;
+    if (!video.videoWidth || !video.videoHeight) return;
+
+    canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+    ctx.drawImage(video, 0, 0);
+
+    let barcodes;
+    try { barcodes = await detector.detect(canvas); } catch(e) { return; }
+    if (!barcodes.length) return;
+
+    const qrText = barcodes[0].rawValue;
+    if (!qrText || qrText === lastCapturedQR) return;
+
+    captureLocked = true;
+    setTimeout(async () => {
+      if (_meliCancelado) { captureLocked = false; return; }
+      canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+      ctx.drawImage(video, 0, 0);
+      let confirm;
+      try { confirm = await detector.detect(canvas); } catch(e) { captureLocked = false; return; }
+      if (!confirm.length || confirm[0].rawValue !== qrText) { captureLocked = false; return; }
+
+      lastCapturedQR = qrText;
+      const emp  = pending[currentIdx];
+      emp.qrCode = await gerarImagemQR(qrText);
+      emp.qr     = qrText;
+
+      const name  = `${emp.fname || ''} ${emp.lname || ''}`.trim();
+      const logEl = document.getElementById('meli-log');
+      const empty = document.getElementById('meli-log-empty');
+      if (empty) empty.remove();
+      logEl.innerHTML = `<p style="font-size:0.82rem;color:#44b560;margin:0 0 4px;">✅ <b>${name}</b></p>` + logEl.innerHTML;
+
+      currentIdx++;
+      if (currentIdx >= pending.length) {
+        clearInterval(scanInterval);
+        _screenStream.getTracks().forEach(t => t.stop());
+        done();
+        document.getElementById('meli-prog-label').innerHTML =
+          `<span style="color:#44b560">✅ Concluído! ${pending.length} QR Code(s) capturado(s).</span>`;
+        document.getElementById('meli-bar').style.width = '100%';
+        document.getElementById('meli-current-name').textContent = '—';
+        gerarTodos();
+      } else {
+        updateUI();
+        setTimeout(() => { captureLocked = false; }, 2000);
+      }
+    }, 800);
+  }, 400);
+
+  _screenStream.getVideoTracks()[0].addEventListener('ended', () => {
+    clearInterval(scanInterval);
+    done();
+  });
 }
 
 async function novoProcesso() {
