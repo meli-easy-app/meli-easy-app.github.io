@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
@@ -1281,6 +1281,7 @@ setupDrop('qr-drop', handleQRFiles, true);
 // ═══════════════════════════════════════════════
 document.getElementById('auto-panel').style.display = 'block';
 document.getElementById('meli-panel').style.display = 'block';
+window.name = 'meliEasyMain';
 if (!window.electronAPI) {
   window.addEventListener('message', _handleExtensionMessage);
   _initMeliPanelWeb();
@@ -1979,6 +1980,7 @@ function _handleExtensionMessage(event) {
   switch (msg.action) {
     case 'login_prompt':
       if (_meliPingInterval) { clearInterval(_meliPingInterval); _meliPingInterval = null; }
+      if (_bookmarkletMode && event.source && event.source !== window) _meliWin = event.source;
       document.getElementById('meli-login-wait').style.display = 'block';
       break;
 
@@ -2080,7 +2082,8 @@ var _f=t=>{var a=[...document.querySelectorAll('a,button,li,span,div,p,td')];ret
 var _d=el=>{if(!el)return;['mouseenter','mouseover','mousedown','mouseup','click'].forEach(e=>el.dispatchEvent(new MouseEvent(e,{bubbles:true,cancelable:true,view:window})));};
 var _sv=(inp,val)=>{try{var c=angular.element(inp).controller('ngModel');if(c){c.$setViewValue(val);c.$render();}}catch(e){}try{Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(inp,val);['input','change','keyup'].forEach(ev=>inp.dispatchEvent(new Event(ev,{bubbles:true})));}catch(e){}try{var m=inp.getAttribute('ng-model');if(m){var sc=angular.element(inp).scope();var p=m.split('.');var o=sc;for(var i=0;i<p.length-1;i++)o=o[p[i]];o[p[p.length-1]]=val;sc.$apply();}}catch(e){}};
 var _src=null;
-var notify=d=>{var t=_src||window.opener;if(t)try{t.postMessage(Object.assign({__meliEasyPush:true},d),'*');}catch(e){}};
+var _appWin=(function(){try{if(window.opener&&!window.opener.closed)return window.opener;}catch(e){}try{var t=window.open('','meliEasyMain');if(t&&!t.closed&&t!==window)return t;}catch(e){}return null;})();
+var notify=d=>{var t=_src||_appWin;if(t&&!t.closed)try{t.postMessage(Object.assign({__meliEasyPush:true},d),'*');}catch(e){}};
 var s1=async()=>{var u=location.href,nav=false;try{var $s=angular.element(document.body).injector().get('$state');var a=$s.get().map(s=>s.name).find(s=>/configur/i.test(_n(s)));if(a){$s.go(a);nav=true;}}catch(e){}if(!nav){var tile=[...document.querySelectorAll('[ng-click],[ui-sref],a')].find(el=>_n(el.textContent).includes('configura'));if(tile){try{var nc=tile.getAttribute('ng-click');if(nc){angular.element(tile).scope().$apply(sc=>sc.$eval(nc));nav=true;}}catch(e){}_d(tile);nav=true;}}if(!nav){var el=_f('Configurações');if(el){_d(el);nav=true;}}if(!nav)return{error:'config_not_found'};var ok=await _wc(()=>location.href!==u&&/funcionári|funcionario/i.test(document.body.innerText),12000);return ok?{ok:true}:{error:'config_timeout'};};
 var s2=async()=>{var u=location.href,nav=false;try{var $s=angular.element(document.body).injector().get('$state');var a=$s.get().map(s=>s.name).find(s=>/funcionar/i.test(s));if(a){$s.go(a);nav=true;}}catch(e){}if(!nav){var txt=_f('Funcionários')||_f('Funcionarios');var cur=txt;while(cur&&cur!==document.body){var nc=cur.getAttribute('ng-click');if(nc){try{angular.element(cur).scope().$apply(sc=>sc.$eval(nc));nav=true;}catch(e){cur.click();nav=true;}break;}cur=cur.parentElement;}if(!nav&&txt){cur=txt;while(cur&&!['A','BUTTON'].includes(cur.tagName)&&!cur.getAttribute('ng-click'))cur=cur.parentElement;if(cur&&cur!==document.body){cur.click();nav=true;}}}if(!nav)return{error:'func_not_found'};var ok=await _wc(()=>location.href!==u||!!(document.querySelector('table tbody tr,[ng-repeat]')&&document.body.innerText.length>200),10000);return ok?{ok:true}:{error:'func_timeout'};};
 var s3=async()=>{await _w(500);if(document.querySelector('input[ng-model*="egistro"],input[ng-model*="Registro"],input[ng-model*="registro"]'))return{ok:true};var lupa=document.querySelector('[ng-click*="pesquis"],[ng-click*="search"],[ng-click*="filtro"]')||document.querySelector('.fa-search')?.closest('a,button')||document.querySelector('.glyphicon-search')?.closest('a,button')||[...document.querySelectorAll('a,button')].find(e=>/pesquisar|filtrar|buscar/i.test(e.textContent));if(!lupa)return{error:'lupa_not_found'};lupa.click();var ok=await _wc(()=>!!document.querySelector('input[ng-model*="egistro"],input[ng-model*="Registro"],input[ng-model*="registro"]'),7000);return ok?{ok:true}:{error:'filter_timeout'};};
@@ -2127,8 +2130,8 @@ window.addEventListener('message',async function(ev){
   notify({action:'complete'});
 });
 var _bkb=document.createElement('div');_bkb.id='__meb_b';_bkb.style.cssText='position:fixed;top:10px;right:10px;background:#00a650;color:#fff;padding:10px 16px;border-radius:8px;z-index:99999;font-size:13px;font-weight:700;box-shadow:0 2px 10px rgba(0,0,0,.4);cursor:pointer';_bkb.innerHTML='✅ Meli Easy ativo';_bkb.title='Clique para fechar';_bkb.onclick=function(){_bkb.remove();};document.body.appendChild(_bkb);
-if(window.opener){notify({action:'login_prompt'});}
-else{_bkb.style.background='#b8860b';_bkb.innerHTML='🔖 Meli Easy — aguardando app...';}
+if(_appWin){notify({action:'login_prompt'});}
+else{_bkb.style.background='#c0392b';_bkb.innerHTML='App nao encontrado -- clique em Buscar QR primeiro';}
 
 })();`;
 
