@@ -391,7 +391,30 @@ h1 { color: #ffe600; font-size: 1.72rem; margin-bottom: 3px; letter-spacing: -0.
     <input type="file" id="photo-files" accept="image/*,application/pdf" multiple style="display:none" onchange="handlePhotoFiles(this.files)">
     <input type="file" id="photo-dir" webkitdirectory multiple style="display:none" onchange="handlePhotoDir(this.files)">
     <button class="mini-btn" style="margin-top:8px" onclick="document.getElementById('photo-dir').click()">📁 Selecionar pasta de fotos</button>
+    <button class="mini-btn" style="margin-top:8px;background:#1a73e8;color:#fff;border-color:#1a73e8" onclick="driveImportFotos()">☁️ Importar do Google Drive</button>
     <p class="info-line" id="photo-info">Nenhuma foto carregada.</p>
+
+    <!-- Modal configuração Drive -->
+    <div id="drive-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;align-items:center;justify-content:center">
+      <div style="background:#1e2230;color:#e0e6f0;border-radius:12px;padding:28px 32px;max-width:520px;width:90%;font-size:13px;line-height:1.6">
+        <h3 style="margin:0 0 12px;color:#FFD100">☁️ Configurar Google Drive</h3>
+        <p style="margin:0 0 10px">Siga os passos <b>uma única vez</b> para conectar o app ao seu Drive:</p>
+        <ol style="margin:0 0 14px;padding-left:18px">
+          <li>Acesse <a href="https://console.cloud.google.com/" target="_blank" style="color:#60b0ff">console.cloud.google.com</a></li>
+          <li>Crie um projeto (ex: <b>MeliEasy</b>)</li>
+          <li>Menu → <b>APIs &amp; Serviços → Biblioteca</b> → ative <b>Google Drive API</b></li>
+          <li>Menu → <b>Credenciais → Criar credenciais → ID do cliente OAuth</b><br>Tipo: <b>Aplicativo da Web</b><br>Origem JS autorizada: <code style="background:#111;padding:1px 5px;border-radius:3px">https://meli-easy-app.github.io</code></li>
+          <li>Copie o <b>ID do cliente</b> e cole abaixo:</li>
+        </ol>
+        <input id="drive-client-id" type="text" placeholder="xxxxx.apps.googleusercontent.com" style="width:100%;box-sizing:border-box;padding:8px;border-radius:6px;border:1px solid #555;background:#111;color:#eee;font-size:12px;margin-bottom:8px">
+        <input id="drive-folder-id" type="text" placeholder="ID da pasta (ex: 1sQqJcBWUEAtae6pCzPbIN2qxSzKIf-Bm)" style="width:100%;box-sizing:border-box;padding:8px;border-radius:6px;border:1px solid #555;background:#111;color:#eee;font-size:12px;margin-bottom:12px">
+        <div style="display:flex;gap:8px;justify-content:flex-end">
+          <button onclick="document.getElementById('drive-modal').style.display='none'" style="padding:7px 16px;border-radius:6px;background:#444;color:#eee;border:none;cursor:pointer">Cancelar</button>
+          <button onclick="driveSaveConfig()" style="padding:7px 16px;border-radius:6px;background:#1a73e8;color:#fff;border:none;cursor:pointer;font-weight:700">Salvar e Conectar</button>
+        </div>
+        <p id="drive-modal-status" style="margin:8px 0 0;font-size:11px;color:#aaa"></p>
+      </div>
+    </div>
 
     <hr>
 
@@ -2154,6 +2177,116 @@ function buscarQRsBookmarklet() {
   if (desc) desc.innerHTML = '⏳ O Meli Pass está abrindo. <b>Faça login</b> se necessário, depois clique no favorito <b>🔖 Meli Easy</b> na barra de favoritos.';
 }
 
+// ── Google Drive: importar fotos ─────────────────────────────────────────────
+var _driveToken = null;
+
+function driveImportFotos() {
+  var clientId = localStorage.getItem('drive_client_id');
+  var folderId = localStorage.getItem('drive_folder_id') || '1sQqJcBWUEAtae6pCzPbIN2qxSzKIf-Bm';
+  if (!clientId) {
+    // Mostra modal de configuração
+    document.getElementById('drive-folder-id').value = folderId;
+    var modal = document.getElementById('drive-modal');
+    modal.style.display = 'flex';
+    return;
+  }
+  _driveAuth(clientId, folderId);
+}
+
+function driveSaveConfig() {
+  var cid = document.getElementById('drive-client-id').value.trim();
+  var fid = document.getElementById('drive-folder-id').value.trim();
+  if (!cid) { document.getElementById('drive-modal-status').textContent = '⚠ Informe o ID do cliente.'; return; }
+  if (!fid) { document.getElementById('drive-modal-status').textContent = '⚠ Informe o ID da pasta.'; return; }
+  localStorage.setItem('drive_client_id', cid);
+  localStorage.setItem('drive_folder_id', fid);
+  document.getElementById('drive-modal').style.display = 'none';
+  _driveAuth(cid, fid);
+}
+
+function _driveAuth(clientId, folderId) {
+  var info = document.getElementById('photo-info');
+  info.textContent = '⏳ Abrindo autenticação Google...';
+  // Cria iframe OAuth2 implicit flow
+  var redirectUri = encodeURIComponent(location.origin + location.pathname);
+  var scope = encodeURIComponent('https://www.googleapis.com/auth/drive.readonly');
+  var url = 'https://accounts.google.com/o/oauth2/v2/auth' +
+    '?client_id=' + encodeURIComponent(clientId) +
+    '&redirect_uri=' + redirectUri +
+    '&response_type=token' +
+    '&scope=' + scope;
+
+  var popup = window.open(url, 'driveAuth', 'width=520,height=620');
+  if (!popup) { info.textContent = '⚠ Popup bloqueado. Libere popups para este site.'; return; }
+
+  var checkTimer = setInterval(function () {
+    try {
+      if (popup.closed) { clearInterval(checkTimer); info.textContent = 'Login cancelado.'; return; }
+      var hash = popup.location.hash;
+      if (hash && hash.includes('access_token')) {
+        clearInterval(checkTimer);
+        popup.close();
+        var params = {};
+        hash.substring(1).split('&').forEach(function (p) {
+          var kv = p.split('='); params[kv[0]] = decodeURIComponent(kv[1] || '');
+        });
+        _driveToken = params.access_token;
+        _driveFetchFotos(folderId);
+      }
+    } catch (e) { /* cross-origin ainda carregando */ }
+  }, 500);
+}
+
+async function _driveFetchFotos(folderId) {
+  var info = document.getElementById('photo-info');
+  info.textContent = '⏳ Listando fotos no Google Drive...';
+  try {
+    var q = encodeURIComponent("'" + folderId + "' in parents and mimeType contains 'image/' and trashed=false");
+    var url = 'https://www.googleapis.com/drive/v3/files?q=' + q +
+              '&fields=files(id,name,mimeType)&pageSize=500';
+    var res = await fetch(url, { headers: { Authorization: 'Bearer ' + _driveToken } });
+    if (!res.ok) { info.textContent = '❌ Erro ao listar Drive: ' + res.status; return; }
+    var data = await res.json();
+    var files = data.files || [];
+    info.textContent = '⏳ Baixando ' + files.length + ' fotos...';
+    var loaded = 0;
+    for (var i = 0; i < files.length; i++) {
+      var f = files[i];
+      try {
+        var dlRes = await fetch('https://www.googleapis.com/drive/v3/files/' + f.id + '?alt=media',
+          { headers: { Authorization: 'Bearer ' + _driveToken } });
+        var blob = await dlRes.blob();
+        var blobUrl = URL.createObjectURL(blob);
+        // Extrai CPF do nome
+        var nameNoExt = f.name.replace(/\.[^.]+$/, '');
+        var grupos = nameNoExt.match(/\d+/g) || [];
+        var cpf11 = grupos.find(function (g) { return g.length === 11; });
+        var key = cpf11 || grupos.join('');
+        if (key) {
+          // Converte para dataURL
+          await new Promise(function (resolve) {
+            var img = new Image();
+            img.onload = function () {
+              var cv = document.createElement('canvas');
+              cv.width = img.naturalWidth; cv.height = img.naturalHeight;
+              cv.getContext('2d').drawImage(img, 0, 0);
+              try { photoLib[key] = cv.toDataURL('image/jpeg', 0.85); } catch (e) { photoLib[key] = blobUrl; }
+              loaded++; resolve();
+            };
+            img.onerror = resolve;
+            img.src = blobUrl;
+          });
+        }
+      } catch (e) { console.warn('[Drive] Erro ao baixar', f.name, e); }
+    }
+    matchPhotos();
+    renderTable(); renderPreview();
+    info.textContent = '✅ ' + loaded + ' fotos importadas do Google Drive!';
+  } catch (e) {
+    info.textContent = '❌ Erro: ' + e.message;
+    console.error('[Drive]', e);
+  }
+}
 // ── Screen Capture: captura QR Codes do Meli Pass sem extensão ──────────────
 
 async function iniciarCapturaScreenMeli() {
