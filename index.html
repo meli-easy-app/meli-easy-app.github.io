@@ -1945,9 +1945,12 @@ function _initMeliPanelWeb() {
     if (!Array.isArray(results)) return;
     var changed = 0;
     results.forEach(function(r) {
-      if (!r.qrCode) return;
+      if (!r.qrCode && !r.photoUrl) return;
       var item = batchData.find(function(d) { return (r.re && d.re === r.re) || (r.cpf && d.cpf === r.cpf); });
-      if (item) { item.qrCode = r.qrCode; changed++; }
+      if (item) {
+        if (r.qrCode) { item.qrCode = r.qrCode; changed++; }
+        if (r.photoUrl && !item.photo) { item.photo = r.photoUrl; }
+      }
     });
     if (changed) {
       _bookmarkletMode = false;
