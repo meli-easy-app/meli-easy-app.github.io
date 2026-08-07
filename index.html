@@ -128,6 +128,7 @@ h1 { color: #ffe600; font-size: 1.72rem; margin-bottom: 3px; letter-spacing: -0.
   <link rel="apple-touch-icon" href="icons/icon-192.png">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Crachás ML">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 </head>
 <body>
 
@@ -386,12 +387,14 @@ h1 { color: #ffe600; font-size: 1.72rem; margin-bottom: 3px; letter-spacing: -0.
     <div class="dropzone" id="photo-drop" onclick="document.getElementById('photo-files').click()">
       <div class="big">🖼️</div>
       <div class="txt">Clique ou arraste as fotos de rosto</div>
-      <div class="sub">Imagens nomeadas como "NOME CPF.jpg" ou só "CPF.jpg". Ou um PDF com todas as fotos (uma por página)</div>
+      <div class="sub">Imagens nomeadas como "NOME CPF.jpg" ou só "CPF.jpg". PDF com fotos ou <b>ZIP baixado do Google Drive</b></div>
     </div>
-    <input type="file" id="photo-files" accept="image/*,application/pdf" multiple style="display:none" onchange="handlePhotoFiles(this.files)">
+    <input type="file" id="photo-files" accept="image/*,application/pdf,application/zip,.zip" multiple style="display:none" onchange="handlePhotoFiles(this.files)">
     <input type="file" id="photo-dir" webkitdirectory multiple style="display:none" onchange="handlePhotoDir(this.files)">
     <button class="mini-btn" style="margin-top:8px" onclick="document.getElementById('photo-dir').click()">📁 Selecionar pasta de fotos</button>
-    <button class="mini-btn" style="margin-top:8px;background:#1a73e8;color:#fff;border-color:#1a73e8" onclick="driveImportFotos()">☁️ Importar do Google Drive</button>
+    <div style="margin-top:8px;padding:8px 12px;background:#1a3a5c;border-radius:6px;font-size:11px;color:#90b8d8;line-height:1.5">
+      <b style="color:#60b8ff">☁️ Google Drive?</b> Clique com botão direito na pasta → <b>Download</b> → baixa um ZIP. Arraste o ZIP aqui ou clique acima.
+    </div>
     <p class="info-line" id="photo-info">Nenhuma foto carregada.</p>
 
     <!-- Modal configuração Drive -->
@@ -1022,6 +1025,10 @@ function handlePhotoDir(files) {
 
 async function handlePhotoFiles(files) {
   const arr = Array.from(files || []); if(!arr.length) return;
+  // ZIP: extrai imagens antes de processar
+  const zips = arr.filter(f => /\.zip$/i.test(f.name) || f.type === 'application/zip' || f.type === 'application/x-zip-compressed');
+  const nonZips = arr.filter(f => !/\.zip$/i.test(f.name) && f.type !== 'application/zip' && f.type !== 'application/x-zip-compressed');
+  if (zips.length) { extractZipPhotos(zips, nonZips); return; }
   const info = document.getElementById('photo-info');
   info.innerHTML = 'Processando fotos…';
   let imgCount = 0, pdfPages = 0;
@@ -2177,6 +2184,57 @@ function buscarQRsBookmarklet() {
   if (desc) desc.innerHTML = '⏳ O Meli Pass está abrindo. <b>Faça login</b> se necessário, depois clique no favorito <b>🔖 Meli Easy</b> na barra de favoritos.';
 }
 
+// ── ZIP: extrai fotos de arquivo ZIP baixado do Google Drive ─────────────────
+async function extractZipPhotos(zipFiles, otherFiles) {
+  const info = document.getElementById('photo-info');
+  info.innerHTML = '⏳ Extraindo fotos do ZIP...';
+  const imgExts = /\.(jpe?g|png|gif|webp|bmp)$/i;
+  const macJunk = /^__MACOSX\//; // ignorar metadados do macOS
+
+  try {
+    if (typeof JSZip === 'undefined') {
+      info.innerHTML = '❌ Biblioteca ZIP não carregou. Tente recarregar a página (Ctrl+Shift+R).';
+      return;
+    }
+    let totalImgs = 0;
+    for (const zipFile of zipFiles) {
+      const zip = await JSZip.loadAsync(zipFile);
+      const imageEntries = Object.entries(zip.files).filter(([path, entry]) =>
+        !entry.dir && imgExts.test(path) && !macJunk.test(path)
+      );
+      info.innerHTML = `⏳ ZIP: ${imageEntries.length} imagens encontradas, processando...`;
+      for (const [path, entry] of imageEntries) {
+        const blob = await entry.async('blob');
+        const fileName = path.split('/').pop(); // apenas o nome do arquivo
+        const nameNoExt = fileName.replace(/\.[^.]+$/, '');
+        const grupos = nameNoExt.match(/\d+/g) || [];
+        const cpf11 = grupos.find(g => g.length === 11);
+        const key = cpf11 || grupos.join('');
+        if (!key) continue;
+        // Converte para dataURL
+        await new Promise(resolve => {
+          const img = new Image();
+          img.onload = () => {
+            const cv = document.createElement('canvas');
+            cv.width = img.naturalWidth; cv.height = img.naturalHeight;
+            cv.getContext('2d').drawImage(img, 0, 0);
+            try { photoLib[key] = cv.toDataURL('image/jpeg', 0.85); } catch(e) { photoLib[key] = URL.createObjectURL(blob); }
+            totalImgs++; resolve();
+          };
+          img.onerror = resolve;
+          img.src = URL.createObjectURL(blob);
+        });
+      }
+    }
+    // Processa arquivos não-ZIP que vieram junto (se houver)
+    if (otherFiles.length) await handlePhotoFiles(otherFiles);
+    else { matchPhotos(); renderTable(); renderPreview(); }
+    info.innerHTML = `✅ ${totalImgs} fotos extraídas do ZIP e casadas por CPF!`;
+  } catch(e) {
+    info.innerHTML = '❌ Erro ao abrir ZIP: ' + e.message;
+    console.error('[ZIP]', e);
+  }
+}
 // ── Google Drive: importar fotos ─────────────────────────────────────────────
 var _driveToken = null;
 
