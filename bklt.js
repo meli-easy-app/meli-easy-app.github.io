@@ -72,8 +72,38 @@
     } catch (e) { console.warn('[MeliEasy] hash parse error', e); }
   }
 
+  // 3) Iframe relay — busca dados do localStorage do app (plano B para aba errada)
   if (!_inputData) {
-    _step('⚠️ <b>Sem dados.</b> Clique em "Buscar QR" no app Meli Easy antes deste favorito.<br><small>window.name: ' + (window.name || '(vazio)').substring(0, 50) + '</small>', '#c0392b');
+    _step('⏳ Buscando dados do app via relay…', '#555');
+    _inputData = await new Promise(function (res) {
+      var _fi = document.createElement('iframe');
+      _fi.style.cssText = 'position:fixed;width:0;height:0;border:none;opacity:0;pointer-events:none;';
+      _fi.src = 'https://meli-easy-app.github.io/relay.html?_=' + Date.now();
+      var _ti = setTimeout(function () {
+        window.removeEventListener('message', _hi);
+        try { _fi.remove(); } catch (ex) {}
+        res(null);
+      }, 6000);
+      var _hi = function (e) {
+        if (e.origin !== 'https://meli-easy-app.github.io') return;
+        if (!e.data || !('meliEasyBatch' in e.data)) return;
+        clearTimeout(_ti);
+        window.removeEventListener('message', _hi);
+        try { _fi.remove(); } catch (ex) {}
+        if (!e.data.meliEasyBatch) { res(null); return; }
+        try {
+          var parsed = JSON.parse(decodeURIComponent(escape(atob(e.data.meliEasyBatch))));
+          console.info('[MeliEasy] Dados via relay —', parsed.length, 'colaboradores');
+          res(parsed);
+        } catch (ex) { res(null); }
+      };
+      window.addEventListener('message', _hi);
+      document.body.appendChild(_fi);
+    });
+  }
+
+  if (!_inputData) {
+    _step('⚠️ <b>Sem dados.</b> Clique em "Buscar QR" no app Meli Easy <b>antes</b> deste favorito.<br><small>Use a guia que o app abriu automaticamente.</small>', '#c0392b');
     window.__meb = false;
     return;
   }

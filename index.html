@@ -1051,11 +1051,17 @@ async function handlePhotoFiles(files) {
     info.innerHTML = `Carregando ${imgs.length} foto(s)…`;
     const results = await Promise.all(imgs.map(async file => {
       const im = await loadImageFile(file);
-      // Extrai CPF (11 dígitos consecutivos) do nome do arquivo — formato "NOME CPF.jpg"
-      const nameNoExt = file.name.split('.').slice(0,-1).join('.');
-      const grupos = nameNoExt.match(/\d+/g) || [];
-      const cpf11 = grupos.find(g => g.length === 11);        // sequência exata de 11 dígitos = CPF
-      const key   = cpf11 || grupos.join('');                  // fallback: todos os dígitos juntos
+      // Extrai CPF do nome do arquivo com 3 estratégias em cascata
+      const nameNoExt = file.name.replace(/\.[^.]+$/, '');
+      // 1) 11 dígitos isolados (não adjacentes a outro dígito) — "NOME 12345678901"
+      const m11   = nameNoExt.match(/(?<!\d)\d{11}(?!\d)/);
+      // 2) CPF formatado 000.000.000-00 ou 000.000.000.00 — "123.456.789-01 NOME"
+      const mFmt  = m11 ? null : nameNoExt.match(/\d{3}[.\-]\d{3}[.\-]\d{3}[.\-]\d{2}/);
+      // 3) Fallback: junta todos os grupos numéricos, aceita SOMENTE se totalizar 11
+      const fbAll = (!m11 && !mFmt) ? (nameNoExt.match(/\d+/g) || []).join('') : '';
+      const key   = m11  ? m11[0]
+                  : mFmt ? mFmt[0].replace(/\D/g, '')
+                  : fbAll.length === 11 ? fbAll : '';
       return { key, im };
     }));
     for(const { key, im } of results) {
@@ -2222,9 +2228,18 @@ function buscarQRsBookmarklet() {
   try { encoded = btoa(unescape(encodeURIComponent(JSON.stringify(collaborators)))); }
   catch(e) { encoded = btoa(JSON.stringify(collaborators)); }
 
+  // Fechar guia anterior do Meli Pass — garante aba única
+  if (_meliWin) { try { _meliWin.close(); } catch(e) {} _meliWin = null; }
+
+  // Salvar no localStorage para fallback via relay.html
+  try {
+    localStorage.setItem('meliEasyBatch', encoded);
+    localStorage.setItem('meliEasyBatchTS', String(Date.now()));
+  } catch(e) {}
+
   const _winName = 'melidata_' + encoded;
   _meliWin = window.open(
-    'https://controleacessomlb.providersml.com/AccessControl/Home#_med=' + encoded,
+    'https://controleacessomlb.providersml.com/AccessControl/Home',
     _winName, 'width=1200,height=750'
   );
   if (!_meliWin) {
@@ -2232,8 +2247,9 @@ function buscarQRsBookmarklet() {
     alert('⚠ Popup bloqueado pelo navegador!\n\nPara liberar:\n1. Clique no ícone 🚫 na barra de endereço\n2. Selecione "Sempre permitir popups de meli-easy-app.github.io"\n3. Clique em "Concluído" e tente novamente');
     return;
   }
+  try { _meliWin.focus(); } catch(e) {}
   const desc = document.querySelector('#meli-panel .auto-desc');
-  if (desc) desc.innerHTML = '⏳ O Meli Pass está abrindo. <b>Faça login</b> se necessário, depois clique no favorito <b>🔖 Meli Easy</b> na barra de favoritos.';
+  if (desc) desc.innerHTML = '⏳ Meli Pass aberto em guia única. <b>Alterne para essa guia</b>, faça login se necessário e clique no favorito <b>🔖 Meli Easy</b>.<br><small style="margin-top:4px;display:block"><a href="#" onclick="try{_meliWin&&_meliWin.focus();}catch(e){}return false;" style="color:#ffd700;text-decoration:underline;">↗ Focar na guia do Meli Pass</a></small>';
 }
 
 // ── ZIP: extrai fotos de arquivo ZIP baixado do Google Drive ─────────────────

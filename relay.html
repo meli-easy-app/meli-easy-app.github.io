@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Meli Easy Relay</title></head>
+<body>
+<script>
+(function () {
+  var d = null;
+  try {
+    var enc = localStorage.getItem('meliEasyBatch');
+    var ts  = parseInt(localStorage.getItem('meliEasyBatchTS') || '0');
+    if (enc && (Date.now() - ts < 7200000)) d = enc; // válido por 2 h
+  } catch (e) {}
+  // Envia para o iframe pai (bklt.js no Meli Pass)
+  window.parent.postMessage({ meliEasyBatch: d }, '*');
+})();
+</script>
+</body></html>
