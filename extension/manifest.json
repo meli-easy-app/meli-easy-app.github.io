@@ -1,0 +1,14 @@
+{
+  "manifest_version": 3,
+  "name": "Meli Easy — QR Auto Fetch",
+  "version": "2.0",
+  "description": "Busca QR codes automaticamente no Meli Pass quando iniciado pelo app Meli Easy",
+  "content_scripts": [
+    {
+      "matches": ["https://controleacessomlb.providersml.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle",
+      "world": "MAIN"
+    }
+  ]
+}
