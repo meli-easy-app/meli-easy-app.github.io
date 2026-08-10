@@ -46,6 +46,14 @@ canvas.preview { width: 240px; height: auto; border-radius: 9px; box-shadow: 0 8
 #filter-bar select { background:#262750; border:1px solid #34356a; border-radius:6px; color:#eaeaf2; padding:6px 10px; font-size:0.8rem; outline:none; cursor:pointer; }
 #filter-bar select:focus { border-color:#ffe600; }
 #filter-count { font-size:0.78rem; color:#7a7b95; margin-left:auto; }
+/* ── Barra de pesquisa e ordenação ── */
+#search-bar { display:none; align-items:center; gap:8px; margin-bottom:10px; }
+#search-input { flex:1; background:#262750; border:1px solid #34356a; border-radius:7px; color:#eaeaf2; padding:8px 12px 8px 34px; font-size:0.85rem; outline:none; transition:border-color 0.15s; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%237a7b95' stroke-width='2'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cpath d='m21 21-4.35-4.35'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:10px center; }
+#search-input:focus { border-color:#ffe600; }
+#search-input::placeholder { color:#4a4b68; }
+#btn-sort { flex:none; background:#262750; border:1px solid #34356a; border-radius:7px; color:#9a9ab0; padding:8px 13px; font-size:0.8rem; cursor:pointer; white-space:nowrap; transition:border-color 0.15s, color 0.15s; }
+#btn-sort:hover { border-color:#ffe600; color:#ffe600; }
+#btn-sort.active { border-color:#ffe600; color:#ffe600; background:#1e1e38; }
 /* ── Filtros por chips no painel superior ── */
 #chip-filter-area { margin-top:14px; border-top:1px solid #2a2b52; padding-top:12px; }
 #chip-filter-area label { display:block; font-size:0.72rem; color:#8f90a8; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:8px; }
@@ -478,13 +486,17 @@ h1 { color: #ffe600; font-size: 1.72rem; margin-bottom: 3px; letter-spacing: -0.
         <button class="mini-btn" id="save-work-btn" onclick="salvarTrabalho()" disabled style="background:#ffe600;color:#1a1a2e;font-weight:700;">💾 Salvar trabalho</button>
         <button class="mini-btn" id="download-all-btn" onclick="downloadAll()" disabled>⬇ Baixar todos (ZIP de PDFs)</button>
       </div>
-      <div id="filter-bar" style="justify-content:flex-end;">
-        <span id="filter-count" style="font-size:0.78rem;color:#7a7b95;"></span>
+      <div id="search-bar">
+        <input type="text" id="search-input" placeholder="Pesquisar por nome, RE ou CPF…" oninput="onSearchInput()">
+        <button id="btn-sort" onclick="toggleSort()" title="Ordenar por nome">A→Z</button>
+        <span id="filter-count" style="font-size:0.78rem;color:#7a7b95;white-space:nowrap;"></span>
+      </div>
+      <div id="filter-bar" style="justify-content:flex-end;margin-bottom:0;border-top:none;padding-top:0;">
       </div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>#</th><th>Nome</th><th>CPF</th><th>RE</th><th>Área</th><th>Empresa</th><th>Foto</th><th>ID QR</th><th>QR</th></tr></thead>
-          <tbody id="batch-body"><tr><td colspan="9" class="empty-state">Importe uma planilha para começar</td></tr></tbody>
+          <thead><tr><th>#</th><th>Nome</th><th>CPF</th><th>RE</th><th>Área</th><th>Empresa</th><th>Foto</th><th>ID QR</th><th>QR</th><th></th></tr></thead>
+          <tbody id="batch-body"><tr><td colspan="10" class="empty-state">Importe uma planilha para começar</td></tr></tbody>
         </table>
       </div>
       <div class="progress" id="progress"><div class="bar" id="progress-bar"></div></div>
@@ -649,19 +661,15 @@ function drawBack(ctx, re, area, empresa, qrImg, qrText, cb) {
     if(cb) cb();
   };
 
-  if(qrImg && qrImg.tagName === 'IMG') {
-    // 1) Imagem QR gerada pelo Meli Pass — usa direto
+  const hasId = qrText && qrText.toString().trim();
+  if(hasId && qrImg && qrImg.tagName === 'IMG') {
+    // Imagem do Meli Pass com ID confirmado — usa direto
     place(qrImg);
   } else {
-    // 2) Gera QR a partir do número do Meli Pass (ID QR)
-    // Não usa o RE como fallback — QR só existe se vier do Meli Pass
-    const content = qrText && qrText.toString().trim();
-    if (content) {
-      const qr = makeQR(content, 500);
-      setTimeout(() => { place(qr.el); qr.cleanup(); }, 50);
-    } else {
-      if(cb) cb(); // sem número Meli Pass → área QR vazia
-    }
+    // Sem ID QR do Meli Pass — área QR fica em branco
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(qx-4, qy-4, qs+8, qs+8);
+    if(cb) cb();
   }
 }
 
@@ -836,14 +844,14 @@ function drawBackExterno(ctx, docId, empresa, area, qrImg, qrText, cb) {
   // QR code (positioned below fields, left-aligned)
   const qx = w * 0.06, qy = h * 0.455, qs = w * 0.52;
   const place = img => { ctx.drawImage(img, qx, qy, qs, qs); if(cb) cb(); };
-  if (qrImg && qrImg.tagName === 'IMG') {
+  const hasId = qrText && qrText.toString().trim();
+  if (hasId && qrImg && qrImg.tagName === 'IMG') {
     place(qrImg);
   } else {
-    const content = (qrText||'').toString().trim();
-    if (content) {
-      const qr = makeQR(content, 500);
-      setTimeout(() => { place(qr.el); qr.cleanup(); }, 50);
-    } else { if(cb) cb(); }
+    // Sem ID QR do Meli Pass — área QR fica em branco
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(qx-4, qy-4, qs+8, qs+8);
+    if(cb) cb();
   }
 
   // Rotated side text (right edge, vertical)
@@ -968,8 +976,11 @@ function ingestRows(rows) {
 // ── Photos: accept individual images (named by CPF) or a PDF with many photos ──
 function loadImageFile(file) {
   return new Promise(res => {
+    const timer = setTimeout(() => res(null), 10000); // segurança: nunca trava
+    const done = v => { clearTimeout(timer); res(v); };
     const reader = new FileReader();
-    reader.onload = e => { const im = new Image(); im.onload = () => res(im); im.src = e.target.result; };
+    reader.onload  = e => { const im = new Image(); im.onload = () => done(im); im.onerror = () => done(null); im.src = e.target.result; };
+    reader.onerror = () => done(null);
     reader.readAsDataURL(file);
   });
 }
@@ -1177,24 +1188,32 @@ function onCpfEdit() {
 function renderTable() {
   const tb = document.getElementById('batch-body');
   if (!batchData.length) {
-    tb.innerHTML = '<tr><td colspan="9" class="empty-state">Importe uma planilha para começar</td></tr>';
+    tb.innerHTML = '<tr><td colspan="10" class="empty-state">Importe uma planilha para começar</td></tr>';
     return;
   }
   updateFilterCount();
-  const rows = batchData
+  let rows = batchData
     .map((d, i) => ({ d, i }))
-    .filter(({ d }) => matchesFilters(d));
+    .filter(({ d }) => matchesFilters(d) && matchesSearch(d));
+  if (_sortAlpha !== 0) {
+    rows = [...rows].sort((a, b) => {
+      const na = _norm(`${a.d.fname} ${a.d.lname}`);
+      const nb = _norm(`${b.d.fname} ${b.d.lname}`);
+      return _sortAlpha * na.localeCompare(nb, 'pt-BR');
+    });
+  }
   if (!rows.length) {
-    tb.innerHTML = '<tr><td colspan="9" class="empty-state">Nenhum colaborador com os filtros selecionados.</td></tr>';
+    tb.innerHTML = '<tr><td colspan="10" class="empty-state">Nenhum colaborador encontrado.</td></tr>';
     return;
   }
-  tb.innerHTML = rows.map(({ d, i }) => `
+  tb.innerHTML = rows.map(({ d, i }, idx) => `
     <tr class="data-row ${i===selectedRow?'selected':''}" onclick="selectRow(${i})">
-      <td>${i+1}</td><td>${d.fname} ${d.lname}</td><td>${d.cpf||'—'}</td>
+      <td>${idx+1}</td><td>${d.fname} ${d.lname}</td><td>${d.cpf||'—'}</td>
       <td>${d.re||'—'}</td><td>${d.area||'—'}</td><td>${d.empresa||'—'}</td>
       <td>${d.photo?'<span class="badge-photo">✓ foto</span>':'<span class="badge-nophoto">sem foto</span>'}</td>
       <td>${d.qrCode?`<span class="badge-photo">${d.qrCode}</span>`:'<span class="badge-nophoto">—</span>'}</td>
-      <td>${d.qr?'<span class="badge-photo">✓ imagem</span>':(d.qrCode?'<span class="badge-photo">✓ nº cadastro</span>':(d.re?'<span class="badge-nophoto">auto (RE)</span>':'<span class="badge-nophoto">—</span>'))}</td>
+      <td>${d.qr?'<span class="badge-photo">✓ imagem</span>':(d.qrCode?'<span class="badge-photo">✓ nº cadastro</span>':'<span class="badge-nophoto">sem QR</span>')}</td>
+      <td onclick="event.stopPropagation()"><button onclick="removeRow(${i})" title="Remover crachá" style="flex:none;width:28px;height:28px;padding:0;background:#2a1a1a;border:1px solid #5a2a2a;border-radius:6px;color:#ff6b6b;font-size:0.9rem;cursor:pointer;line-height:1;" onmouseover="this.style.background='#3a1a1a'" onmouseout="this.style.background='#2a1a1a'">✕</button></td>
     </tr>`).join('');
 }
 function selectRow(i) {
@@ -1213,6 +1232,16 @@ function selectRow(i) {
     }
   });
 });
+function removeRow(i) {
+  batchData.splice(i, 1);
+  if (selectedRow === i) { selectedRow = -1; clearForm(); }
+  else if (selectedRow > i) { selectedRow--; }
+  const empty = !batchData.length;
+  document.getElementById('download-all-btn').disabled = empty;
+  document.getElementById('save-work-btn').disabled = empty;
+  renderTable();
+  if (selectedRow >= 0 && batchData[selectedRow]) renderPreview();
+}
 function clearForm() {
   ['fname','lname','cpf','re','area','empresa','qrcode'].forEach(id => document.getElementById(id).value='');
   document.getElementById('photo-single').value=''; singlePhoto=null;
@@ -1396,13 +1425,20 @@ async function loadFolderElectron() {
     }
   }
 
+  // Lê todos os arquivos de foto em PARALELO via IPC (ao invés de um por um)
+  const allPhotoFiles = [...imgFiles, ...pdfFiles];
   const photoObjs = [];
-  for (const f of [...imgFiles, ...pdfFiles]) {
-    statusEl.textContent = `Carregando: ${f.name}…`;
-    const fd = await window.electronAPI.readFile(f.path);
-    if (fd) {
-      const type = /\.pdf$/i.test(f.name) ? 'application/pdf' : '';
-      photoObjs.push(new File([new Uint8Array(fd.data)], fd.name, { type }));
+  if (allPhotoFiles.length) {
+    statusEl.textContent = `Carregando ${allPhotoFiles.length} foto(s)…`;
+    const fds = await Promise.all(allPhotoFiles.map(f => window.electronAPI.readFile(f.path)));
+    for (let i = 0; i < allPhotoFiles.length; i++) {
+      const fd = fds[i];
+      if (fd) {
+        const _ext = allPhotoFiles[i].name.split('.').pop().toLowerCase();
+        const _mime = { jpg:'image/jpeg', jpeg:'image/jpeg', png:'image/png', webp:'image/webp', gif:'image/gif', bmp:'image/bmp' };
+        const type = /\.pdf$/i.test(allPhotoFiles[i].name) ? 'application/pdf' : (_mime[_ext] || 'image/jpeg');
+        photoObjs.push(new File([new Uint8Array(fd.data)], fd.name, { type }));
+      }
     }
   }
   if (photoObjs.length) {
@@ -1573,11 +1609,13 @@ function clearAllChips() {
 }
 
 function updateFilterCount() {
-  const visible = batchData.filter(d => matchesFilters(d)).length;
+  const visible = batchData.filter(d => matchesFilters(d) && matchesSearch(d)).length;
   const el = document.getElementById('filter-count');
-  if (el) el.textContent = activeFilters.length
+  if (!el) return;
+  const filtered = visible < batchData.length;
+  el.textContent = filtered
     ? `${visible} de ${batchData.length} colaboradores`
-    : `${batchData.length} colaboradores`;
+    : `${batchData.length} colaborador${batchData.length !== 1 ? 'es' : ''}`;
 }
 
 function matchesFilters(d) {
@@ -1590,11 +1628,45 @@ function matchesFilters(d) {
 }
 
 function buildFilterOptions() {
-  document.getElementById('filter-bar').style.display = batchData.length ? 'flex' : 'none';
+  const hasData = batchData.length > 0;
+  document.getElementById('filter-bar').style.display = hasData ? 'flex' : 'none';
+  document.getElementById('search-bar').style.display  = hasData ? 'flex' : 'none';
   updateFilterCount();
 }
 function applyFilter() { renderTable(); }
 function clearFilters() { renderTable(); }
+
+// ── Pesquisa e ordenação ──────────────────────────────────────────────────────
+let _searchQuery = '';
+let _sortAlpha   = 0; // 0 = original, 1 = A→Z, -1 = Z→A
+
+function _norm(s) {
+  return (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+}
+
+function onSearchInput() {
+  _searchQuery = document.getElementById('search-input').value.trim();
+  renderTable();
+  updateFilterCount();
+}
+
+function toggleSort() {
+  _sortAlpha = _sortAlpha === 1 ? -1 : 1;
+  const btn = document.getElementById('btn-sort');
+  btn.textContent = _sortAlpha === 1 ? 'A→Z ✓' : 'Z→A ✓';
+  btn.classList.add('active');
+  renderTable();
+}
+
+function matchesSearch(d) {
+  if (!_searchQuery) return true;
+  const q = _norm(_searchQuery);
+  const name = _norm(`${d.fname} ${d.lname}`);
+  const re   = (d.re   || '').trim();
+  const cpf  = (d.cpf  || '').replace(/\D/g, '');
+  const qDig = _searchQuery.replace(/\D/g, '');
+  return name.includes(q) || re.includes(_searchQuery.trim()) || (qDig && cpf.includes(qDig));
+}
 
 function selectModel(name) {
   currentModel = name;
@@ -1961,7 +2033,67 @@ async function decodificarQRsWeb() {
   btn.disabled = false;
 }
 
-// ── Extension-based Meli Pass automation (web mode) ─────────────────────────
+// ── Servidor local (localhost:5555) — detecção e busca automática ─────────────
+
+async function _checkLocalServer() {
+  try {
+    const r = await fetch('http://localhost:5555/status',
+      { signal: AbortSignal.timeout(1500) });
+    if (r.ok) { const d = await r.json(); return d.ok ? d : null; }
+  } catch(e) {}
+  return null;
+}
+
+async function buscarQRServidor() {
+  if (!batchData.length) { alert('⚠ Importe a planilha antes de buscar QR Codes.'); return; }
+  const pending = batchData.filter(d => !d.qrCode);
+  if (!pending.length) { alert('✓ Todos já têm QR Code.'); return; }
+
+  const btnFetch = document.getElementById('btn-meli-fetch');
+  const descmp   = document.querySelector('#meli-panel .auto-desc');
+  if (btnFetch) btnFetch.disabled = true;
+
+  const batch = pending.map(d => ({ re: d.re, cpf: d.cpf, fname: d.fname, lname: d.lname }));
+
+  try {
+    if (descmp) descmp.innerHTML = '⏳ Buscando QR codes no Meli Pass… <small style="color:#7a7b95">(pode levar alguns minutos)</small>';
+
+    const response = await fetch('http://localhost:5555/fetch-qr', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ batch }),
+      signal: AbortSignal.timeout(600000) // 10 min
+    });
+
+    if (!response.ok) throw new Error('Servidor retornou ' + response.status);
+    const data = await response.json();
+    if (!data.ok) throw new Error(data.error || 'Erro no servidor');
+
+    let changed = 0;
+    data.results.forEach(r => {
+      if (!r.qrCode) return;
+      const item = batchData.find(d => (r.re && d.re === r.re) || (r.cpf && d.cpf === r.cpf));
+      if (item) { item.qrCode = r.qrCode; changed++; }
+    });
+
+    if (changed) {
+      renderizarBadges();
+      if (descmp) descmp.innerHTML = '✅ <b>' + changed + '</b> QR code(s) encontrado(s) e aplicado(s)! '
+        + '<span style="color:#7a7b95;font-size:0.78rem;">🟢 Servidor ativo</span>';
+    } else {
+      if (descmp) descmp.innerHTML = '⚠ Nenhum QR code encontrado. Confira os REs no Meli Pass. '
+        + '<span style="color:#7a7b95;font-size:0.78rem;">🟢 Servidor ativo</span>';
+    }
+  } catch (e) {
+    const msg = e.name === 'TimeoutError' ? 'Tempo esgotado (>10 min)' : e.message;
+    if (descmp) descmp.innerHTML = '❌ ' + msg + ' — <a href="#" onclick="_initMeliPanelWeb();return false;" style="color:#ffa726;">tentar novamente</a>';
+    console.error('[MeliEasy] buscarQRServidor:', e);
+  } finally {
+    if (btnFetch) btnFetch.disabled = false;
+  }
+}
+
+// ── Painel web: servidor local (prioritário) → favorito (fallback) ────────────
 
 function _initMeliPanelWeb() {
   const h2mp     = document.querySelector('#meli-panel h2');
@@ -1969,34 +2101,46 @@ function _initMeliPanelWeb() {
   const btnFetch = document.getElementById('btn-meli-fetch');
 
   if (h2mp) h2mp.textContent = '🔍 Buscar QR no Meli Pass';
-  if (btnFetch) { btnFetch.textContent = '🔍 Buscar QR (automático)'; btnFetch.onclick = buscarQRsBookmarklet; }
-  if (descmp) descmp.innerHTML = 'Verificando…';
+  if (descmp) descmp.innerHTML = '<span style="color:#9a9ab0;">Verificando servidor local…</span>';
 
+  async function updateUI() {
+    const status = await _checkLocalServer();
+
+    if (status) {
+      // ── Servidor ativo ──
+      if (btnFetch) { btnFetch.textContent = '🔍 Buscar QR — Automático'; btnFetch.onclick = buscarQRServidor; }
+      if (descmp) descmp.innerHTML =
+        '<span style="color:#44b560;font-weight:700;">🟢 Servidor local ativo</span> — '
+        + 'um clique busca os QR codes automaticamente, sem abrir nenhuma janela extra.<br>'
+        + '<small style="color:#7a7b95;">localhost:5555 · mantenha o <b>iniciar.bat</b> rodando</small>';
+    } else {
+      // ── Servidor offline — mostrar instruções + fallback favorito ──
+      const bkltHref = 'javascript:' + _BKLT;
+      if (btnFetch) { btnFetch.textContent = '🔍 Buscar QR — favorito'; btnFetch.onclick = buscarQRsBookmarklet; }
+      if (descmp) descmp.innerHTML =
+        '<span style="color:#e67e22;font-weight:700;">🔴 Servidor offline</span> — para busca automática (recomendado):<br>'
+        + '<b>1.</b> Abra a pasta <code>server/</code> e dê duplo clique em <b>iniciar.bat</b><br>'
+        + '<b>2.</b> Aguarde o Chrome abrir e faça login no Meli Pass (só na 1ª vez)<br>'
+        + '<b>3.</b> Clique em "Buscar QR" aqui — tudo automático<br>'
+        + '<hr style="border-color:#3a3b55;margin:8px 0;">'
+        + '<small>Alternativa sem servidor: arraste o link para favoritos → '
+        + '<a id="bklt-drag-link" href="' + bkltHref.replace(/"/g,'&quot;') + '" '
+        + 'style="display:inline;background:#FFD100;color:#333;font-weight:700;'
+        + 'padding:3px 8px;border-radius:4px;text-decoration:none;cursor:grab;font-size:0.8rem;" '
+        + 'draggable="true">🔖 Meli Easy</a> e clique nele no Meli Pass.</small>';
+      setTimeout(() => {
+        const lnk = document.getElementById('bklt-drag-link');
+        if (lnk) lnk.href = bkltHref;
+      }, 100);
+      // Re-verifica a cada 4 s até servidor aparecer
+      const iv = setInterval(async () => {
+        if (await _checkLocalServer()) { clearInterval(iv); updateUI(); }
+      }, 4000);
+    }
+  }
+
+  updateUI();
   window.postMessage({ __meliEasy: true, action: 'ping' }, '*');
-
-  setTimeout(() => {
-    if (_extensionDetected) return;
-
-    // Gera link do bookmarklet dinamicamente
-    const bkltHref = 'javascript:' + _BKLT;
-    const dragHtml = `<span style="display:inline-block;margin:10px 0 6px;">
-      Arraste este link para a <b>barra de favoritos</b> do Chrome (uma vez só):&nbsp;
-      <a id="bklt-drag-link" href="${bkltHref.replace(/"/g,'&quot;')}"
-         style="display:inline-block;background:#FFD100;color:#333;font-weight:700;
-                padding:5px 12px;border-radius:6px;text-decoration:none;cursor:grab;
-                border:2px solid #e6bc00;font-size:0.85rem;" draggable="true">🔖 Meli Easy</a>
-    </span><br>
-    Depois clique em <b>"🔍 Buscar QR (automático)"</b> — o Meli Pass abre automaticamente e você só precisa clicar no favorito e fazer login.<br>
-    <span style="font-size:0.78rem;color:#7a7b95;">Alternativa: <a href="#" onclick="document.getElementById('btn-meli-fetch').textContent='🖥 Capturar via tela';document.getElementById('btn-meli-fetch').onclick=iniciarCapturaScreenMeli;return false;" style="color:#7a7b95">capturar via tela (manual)</a></span>`;
-
-    if (descmp) descmp.innerHTML = dragHtml;
-
-    // Set href directly on the link element to avoid HTML-encoding issues
-    setTimeout(() => {
-      const lnk = document.getElementById('bklt-drag-link');
-      if (lnk) lnk.href = bkltHref;
-    }, 100);
-  }, 1000);
 }
 
 // ── Receptor de resultados do bookmarklet (hash e BroadcastChannel) ──────────
