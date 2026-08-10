@@ -1082,11 +1082,19 @@ function handleQRFiles(files) {
   const arr = Array.from(files||[]); if(!arr.length) return;
   let loaded = 0;
   arr.forEach(file => {
-    const key = onlyDigits(file.name.split('.').slice(0,-1).join('.'));
+    const nameNoExt = file.name.split('.').slice(0,-1).join('.');
+    const grupos = nameNoExt.match(/\d+/g) || [];
+    const cpf11  = grupos.find(g => g.length === 11);
+    const reNum  = grupos.find(g => g.length >= 4 && g.length <= 7);
     const reader = new FileReader();
     reader.onload = e => {
       const im = new Image();
-      im.onload = () => { if(key) qrLib[key]=im; if(++loaded===arr.length){ matchQRs(); renderTable(); renderPreview(); } };
+      im.onload = () => {
+        if(cpf11)  qrLib[cpf11]  = im;
+        if(reNum)  qrLib[reNum]  = im;
+        if(!cpf11 && !reNum && grupos.length) qrLib[grupos.join('')] = im;
+        if(++loaded===arr.length){ matchQRs(); renderTable(); renderPreview(); }
+      };
       im.src = e.target.result;
     };
     reader.readAsDataURL(file);
@@ -1099,6 +1107,10 @@ function matchQRs() {
     const kc = onlyDigits(d.cpf), kr = onlyDigits(d.re);
     if(kc && qrLib[kc])      { d.qr = qrLib[kc]; matched++; }
     else if(kr && qrLib[kr]) { d.qr = qrLib[kr]; matched++; }
+    else { // Substring fallback
+      const entry = Object.entries(qrLib).find(([k]) => (kc && k.includes(kc)) || (kr && k.includes(kr)));
+      if(entry) { d.qr = entry[1]; matched++; }
+    }
   });
   const total = Object.keys(qrLib).length;
   if(total) document.getElementById('qr-info').innerHTML =
