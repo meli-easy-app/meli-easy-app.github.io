@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Meli Easy — abrindo Meli Pass…</title>
+  <style>
+    body { margin: 0; background: #1e1f35; color: #fff; font-family: 'Segoe UI', sans-serif;
+           display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+    .card { background: #2a2b45; border-radius: 16px; padding: 40px 48px; max-width: 480px;
+            text-align: center; box-shadow: 0 8px 32px rgba(0,0,0,.4); }
+    .logo { font-size: 3rem; margin-bottom: 12px; }
+    h1 { margin: 0 0 8px; font-size: 1.4rem; color: #ffd700; }
+    #msg { margin: 20px 0 0; font-size: 1rem; line-height: 1.6; color: #c8cae0; }
+    #msg b { color: #fff; }
+    #msg .ok { color: #00c16e; font-size: 1.1rem; }
+    #msg .err { color: #e74c3c; }
+    .btn { display: inline-block; margin-top: 20px; padding: 10px 24px; background: #ffd700;
+           color: #222; border-radius: 8px; text-decoration: none; font-weight: 700;
+           cursor: pointer; border: none; font-size: 1rem; }
+  </style>
+</head>
+<body>
+<div class="card">
+  <div class="logo">🔖</div>
+  <h1>Meli Easy</h1>
+  <div id="msg">Carregando dados…</div>
+</div>
+<script>
+(function () {
+  var msg = document.getElementById('msg');
+  var enc = null;
+
+  try {
+    enc = localStorage.getItem('meliEasyBatch');
+    var ts  = parseInt(localStorage.getItem('meliEasyBatchTS') || '0');
+    if (enc && (Date.now() - ts > 7200000)) enc = null; // expirado após 2h
+  } catch (e) {}
+
+  if (!enc) {
+    msg.innerHTML =
+      '<span class="err">⚠️ Nenhum dado encontrado.</span><br><br>' +
+      'Volte ao app <b>Meli Easy</b> e clique em <b>"Buscar QR"</b> antes de usar o favorito.<br><br>' +
+      '<a class="btn" href="https://meli-easy-app.github.io/" target="_blank">Abrir app Meli Easy</a>';
+    return;
+  }
+
+  msg.innerHTML = '✅ Dados encontrados! Abrindo Meli Pass na aba correta…';
+
+  var win = window.open(
+    'https://controleacessomlb.providersml.com/AccessControl/Home',
+    'melidata_' + enc,
+    'width=1200,height=750'
+  );
+
+  if (!win) {
+    msg.innerHTML =
+      '<span class="err">⚠️ Popup bloqueado pelo navegador.</span><br><br>' +
+      '<a class="btn" href="https://controleacessomlb.providersml.com/AccessControl/Home" ' +
+      'target="melidata_' + enc + '">Clique aqui para abrir o Meli Pass</a><br><br>' +
+      '<small>Depois clique no favorito 🔖 Meli Easy nessa aba.</small>';
+    return;
+  }
+
+  try { win.focus(); } catch (e) {}
+
+  msg.innerHTML =
+    '<span class="ok">✅ Meli Pass aberto!</span><br><br>' +
+    'Alterne para a nova aba do Meli Pass e clique no favorito<br>' +
+    '<b>🔖 Meli Easy</b> na barra de favoritos.<br><br>' +
+    '<small style="color:#777">Pode fechar esta aba depois.</small>';
+})();
+</script>
+</body>
+</html>
