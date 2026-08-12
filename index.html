@@ -545,6 +545,7 @@ let photoLib = {};
 let qrLib = {};
 let pdfPhotos = [];      // photos extracted from an uploaded PDF: {img, text, assigned}
 let previewTimer = null;
+let _meliPollInterval = null; // poll do servidor local (evita múltiplos intervalos)
 
 const tplFront = document.getElementById('tpl-front');
 const tplBack  = document.getElementById('tpl-back');
@@ -2093,8 +2094,6 @@ async function buscarQRServidor() {
 }
 
 // ── Painel web: servidor local ───────────────────────────────────────────────
-
-let _meliPollInterval = null; // evita múltiplos intervalos entre chamadas
 
 function _initMeliPanelWeb() {
   // Cancela poll anterior se _initMeliPanelWeb() for chamada novamente
