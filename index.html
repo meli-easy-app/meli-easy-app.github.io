@@ -1372,7 +1372,6 @@ document.getElementById('auto-panel').style.display = 'block';
 document.getElementById('meli-panel').style.display = 'block';
 window.name = 'meliEasyMain';
 if (!window.electronAPI) {
-  window.addEventListener('message', _handleExtensionMessage);
   _initMeliPanelWeb();
 }
 
@@ -2095,7 +2094,12 @@ async function buscarQRServidor() {
 
 // ── Painel web: servidor local ───────────────────────────────────────────────
 
+let _meliPollInterval = null; // evita múltiplos intervalos entre chamadas
+
 function _initMeliPanelWeb() {
+  // Cancela poll anterior se _initMeliPanelWeb() for chamada novamente
+  if (_meliPollInterval) { clearInterval(_meliPollInterval); _meliPollInterval = null; }
+
   const h2mp     = document.querySelector('#meli-panel h2');
   const descmp   = document.querySelector('#meli-panel .auto-desc');
   const btnFetch = document.getElementById('btn-meli-fetch');
@@ -2103,14 +2107,12 @@ function _initMeliPanelWeb() {
   if (h2mp) h2mp.textContent = '🔍 Buscar QR no Meli Pass';
   if (descmp) descmp.innerHTML = '<span style="color:#9a9ab0;">Verificando servidor local…</span>';
 
-  let _pollInterval = null;
-
   async function updateUI() {
     const status = await _checkLocalServer();
 
     if (status) {
       // ── Servidor ativo ──
-      if (_pollInterval) { clearInterval(_pollInterval); _pollInterval = null; }
+      if (_meliPollInterval) { clearInterval(_meliPollInterval); _meliPollInterval = null; }
       if (btnFetch) {
         btnFetch.textContent = '🔍 Buscar QR — Automático';
         btnFetch.disabled = false;
@@ -2133,9 +2135,9 @@ function _initMeliPanelWeb() {
         + '<b>2.</b> Aguarde o Chrome abrir e faça login no Meli Pass (só na 1ª vez)<br>'
         + '<b>3.</b> O botão ativa automaticamente quando o servidor estiver pronto';
       // Re-verifica a cada 4 s até servidor aparecer
-      if (!_pollInterval) {
-        _pollInterval = setInterval(async () => {
-          if (await _checkLocalServer()) { clearInterval(_pollInterval); _pollInterval = null; updateUI(); }
+      if (!_meliPollInterval) {
+        _meliPollInterval = setInterval(async () => {
+          if (await _checkLocalServer()) { clearInterval(_meliPollInterval); _meliPollInterval = null; updateUI(); }
         }, 4000);
       }
     }
@@ -2313,11 +2315,6 @@ function _handleExtensionMessage(event) {
       _meliRunning = false;
       _bookmarkletMode = false;
       _meliWin = null;
-      if (btnFetch) {
-        btnFetch.disabled = false;
-        btnFetch.textContent = '🔍 Buscar QR (automático)';
-        btnFetch.onclick = buscarQRsBookmarklet;
-      }
       document.getElementById('btn-meli-cancel').style.display = 'none';
       bar.style.width = '100%';
       const ok   = batchData.filter(x => x.qrCode).length;
@@ -2327,6 +2324,7 @@ function _handleExtensionMessage(event) {
       document.getElementById('meli-current-name').textContent = 'Finalizado ✓';
       renderTable();
       renderPreview();
+      _initMeliPanelWeb(); // restaura UI do servidor
       break;
     }
   }
