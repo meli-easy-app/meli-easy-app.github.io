@@ -2129,10 +2129,11 @@ function _initMeliPanelWeb() {
         btnFetch.onclick = null;
       }
       if (descmp) descmp.innerHTML =
-        '<span style="color:#e67e22;font-weight:700;">🔴 Servidor offline</span> — para usar a busca automática:<br>'
-        + '<b>1.</b> Abra a pasta <code>server/</code> e dê duplo clique em <b>iniciar.bat</b><br>'
-        + '<b>2.</b> Aguarde o Chrome abrir e faça login no Meli Pass (só na 1ª vez)<br>'
-        + '<b>3.</b> O botão ativa automaticamente quando o servidor estiver pronto';
+        '<span style="color:#e67e22;font-weight:700;">🔴 Servidor offline</span><br>'
+        + '<b>1ª vez?</b> <a href="meli-easy-server.zip" download style="color:#ffe600;font-weight:700;">⬇ Baixar servidor</a>'
+        + ' · extraia o ZIP e dê duplo clique em <b>iniciar.bat</b><br>'
+        + 'Já tem o servidor? Abra a pasta <code>server/</code> e dê duplo clique em <b>iniciar.bat</b><br>'
+        + '<small style="color:#7a7b95;">O Chrome abre + o app conecta automaticamente · só faça login no Meli Pass na 1ª vez</small>';
       // Re-verifica a cada 4 s até servidor aparecer
       if (!_meliPollInterval) {
         _meliPollInterval = setInterval(async () => {
