@@ -136,7 +136,7 @@ h1 { color: #ffe600; font-size: 1.72rem; margin-bottom: 3px; letter-spacing: -0.
   <link rel="apple-touch-icon" href="icons/icon-192.png">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Crachás ML">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="lib/jszip.min.js"></script>
 </head>
 <body>
 
@@ -2093,7 +2093,7 @@ async function buscarQRServidor() {
   }
 }
 
-// ── Painel web: servidor local (prioritário) → favorito (fallback) ────────────
+// ── Painel web: servidor local ───────────────────────────────────────────────
 
 function _initMeliPanelWeb() {
   const h2mp     = document.querySelector('#meli-panel h2');
@@ -2103,44 +2103,45 @@ function _initMeliPanelWeb() {
   if (h2mp) h2mp.textContent = '🔍 Buscar QR no Meli Pass';
   if (descmp) descmp.innerHTML = '<span style="color:#9a9ab0;">Verificando servidor local…</span>';
 
+  let _pollInterval = null;
+
   async function updateUI() {
     const status = await _checkLocalServer();
 
     if (status) {
       // ── Servidor ativo ──
-      if (btnFetch) { btnFetch.textContent = '🔍 Buscar QR — Automático'; btnFetch.onclick = buscarQRServidor; }
+      if (_pollInterval) { clearInterval(_pollInterval); _pollInterval = null; }
+      if (btnFetch) {
+        btnFetch.textContent = '🔍 Buscar QR — Automático';
+        btnFetch.disabled = false;
+        btnFetch.onclick = buscarQRServidor;
+      }
       if (descmp) descmp.innerHTML =
         '<span style="color:#44b560;font-weight:700;">🟢 Servidor local ativo</span> — '
         + 'um clique busca os QR codes automaticamente, sem abrir nenhuma janela extra.<br>'
         + '<small style="color:#7a7b95;">localhost:5555 · mantenha o <b>iniciar.bat</b> rodando</small>';
     } else {
-      // ── Servidor offline — mostrar instruções + fallback favorito ──
-      const bkltHref = 'javascript:' + _BKLT;
-      if (btnFetch) { btnFetch.textContent = '🔍 Buscar QR — favorito'; btnFetch.onclick = buscarQRsBookmarklet; }
+      // ── Servidor offline ──
+      if (btnFetch) {
+        btnFetch.textContent = '⏳ Aguardando servidor…';
+        btnFetch.disabled = true;
+        btnFetch.onclick = null;
+      }
       if (descmp) descmp.innerHTML =
-        '<span style="color:#e67e22;font-weight:700;">🔴 Servidor offline</span> — para busca automática (recomendado):<br>'
+        '<span style="color:#e67e22;font-weight:700;">🔴 Servidor offline</span> — para usar a busca automática:<br>'
         + '<b>1.</b> Abra a pasta <code>server/</code> e dê duplo clique em <b>iniciar.bat</b><br>'
         + '<b>2.</b> Aguarde o Chrome abrir e faça login no Meli Pass (só na 1ª vez)<br>'
-        + '<b>3.</b> Clique em "Buscar QR" aqui — tudo automático<br>'
-        + '<hr style="border-color:#3a3b55;margin:8px 0;">'
-        + '<small>Alternativa sem servidor: arraste o link para favoritos → '
-        + '<a id="bklt-drag-link" href="' + bkltHref.replace(/"/g,'&quot;') + '" '
-        + 'style="display:inline;background:#FFD100;color:#333;font-weight:700;'
-        + 'padding:3px 8px;border-radius:4px;text-decoration:none;cursor:grab;font-size:0.8rem;" '
-        + 'draggable="true">🔖 Meli Easy</a> e clique nele no Meli Pass.</small>';
-      setTimeout(() => {
-        const lnk = document.getElementById('bklt-drag-link');
-        if (lnk) lnk.href = bkltHref;
-      }, 100);
+        + '<b>3.</b> O botão ativa automaticamente quando o servidor estiver pronto';
       // Re-verifica a cada 4 s até servidor aparecer
-      const iv = setInterval(async () => {
-        if (await _checkLocalServer()) { clearInterval(iv); updateUI(); }
-      }, 4000);
+      if (!_pollInterval) {
+        _pollInterval = setInterval(async () => {
+          if (await _checkLocalServer()) { clearInterval(_pollInterval); _pollInterval = null; updateUI(); }
+        }, 4000);
+      }
     }
   }
 
   updateUI();
-  window.postMessage({ __meliEasy: true, action: 'ping' }, '*');
 }
 
 // ── Receptor de resultados do bookmarklet (hash e BroadcastChannel) ──────────
